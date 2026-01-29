@@ -31,26 +31,44 @@ jobs:
         run: pip install maturin
 
       - name: Clone and Build hf_transfer
+        shell: bash
         env:
-          # Keep this: prevents PyO3 from inspecting the x64 host Python
           PYO3_NO_PYTHON: '1'
         run: |
           git clone https://github.com/huggingface/hf_transfer
           cd hf_transfer
           
           echo "::group::Patch Cargo.toml"
-          # FIX: Replace 'abi3-py38' with generic 'abi3' (.
-          # 'abi3-py311' caused the linker to look for 'python311.lib'. 
-          # Generic 'abi3' makes it look for 'python3.lib', which matches the generated file.
-          sed -i 's/abi3-py38/abi3/g' Cargo.toml
+          # 1. Set feature to abi3-py312 (Maturin needs this to know the target)
+          sed -i 's/abi3-py38/abi3-py312/g' Cargo.toml
           
-          # Add pyo3 with generate-import-lib. 
-          # This upgrades pyo3 to 0.26+ and enables the pure-Rust lib generator.
+          # 2. Add pyo3 with generate-import-lib
           cargo add pyo3 --features generate-import-lib
           echo "::endgroup::"
           
-          # Build
+          echo "::group::Build Attempt 1 (Expected to Fail)"
+          # 3. Build knowing it will fail at linking (LNK1181)
+          # We use '|| true' to prevent the workflow from stopping here
+          maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib || true
+          echo "::endgroup::"
+          
+          echo "::group::Apply Lib Hack"
+          # 4. Find the generated python3.lib and copy it to python311.lib
+          # This tricks the linker into accepting the generic lib as the specific version
+          count=$(find target -name "python3.lib" | wc -l)
+          echo "Found $count instances of python3.lib"
+          
+          for f in $(find target -name "python3.lib"); do 
+            echo "Copying $f to $(dirname "$f")/python311.lib"
+            cp "$f" "$(dirname "$f")/python311.lib"
+          done
+          echo "::endgroup::"
+          
+          echo "::group::Build Attempt 2 (Success)"
+          # 5. Build again. It should resume, find the lib, and link successfully.
           maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib
+          echo "::endgroup::"
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
