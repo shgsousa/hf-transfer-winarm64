@@ -1,4 +1,6 @@
 name: Build Wheels
+permissions:
+  contents: write  # Required to create a Release
 on:
   push:
     tags:
@@ -36,28 +38,31 @@ jobs:
           PYO3_NO_PYTHON: '1'
         run: |
           # FIX 1: Prioritize Strawberry Perl (required for OpenSSL build)
-          # This prevents the "Can't locate Locale/Maketext/Simple.pm" error
-          echo "/c/Strawberry/perl/bin" >> $GITHUB_PATH
+          # We export it to PATH for the current step...
           export PATH="/c/Strawberry/perl/bin:$PATH"
+          # ...and add it to GITHUB_PATH for any future steps (if needed)
+          echo "/c/Strawberry/perl/bin" >> $GITHUB_PATH
 
           git clone https://github.com/huggingface/hf_transfer
           cd hf_transfer
           
           echo "::group::Patch Cargo.toml"
-          # Set feature to abi3-py312
+          # Set feature to abi3-py312 so Maturin knows the target version
           sed -i 's/abi3-py38/abi3-py312/g' Cargo.toml
           
-          # Add pyo3 with generate-import-lib
+          # Add pyo3 with generate-import-lib to handle the cross-linking
           cargo add pyo3 --features generate-import-lib
           echo "::endgroup::"
           
           echo "::group::Build Attempt 1 (Expected to Fail)"
-          # Build knowing it will fail at linking
+          # Build knowing it will fail at linking, but it will generate python3.lib
           maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib || true
           echo "::endgroup::"
           
           echo "::group::Apply Lib Hack"
-          # FIX 2: Copy to python312.lib (matches the abi3-py312 feature above)
+          # FIX 2: Copy python3.lib to python312.lib
+          # The linker asks for 'python312.lib' because of the feature flag,
+          # but the generator creates 'python3.lib'. We bridge the gap here.
           count=$(find target -name "python3.lib" | wc -l)
           echo "Found $count instances of python3.lib"
           
@@ -68,7 +73,7 @@ jobs:
           echo "::endgroup::"
           
           echo "::group::Build Attempt 2 (Success)"
-          # Build again. It should now find python312.lib and succeed.
+          # Build again. It should now find python312.lib and link successfully.
           maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib
           echo "::endgroup::"
 
@@ -77,3 +82,10 @@ jobs:
         with:
           name: wheels
           path: hf_transfer/target/wheels/*.whl
+      
+      # Upload wheels to GitHub releases
+      - name: Release
+        uses: softprops/action-gh-release@v2  # Updated to v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: hf_transfer/target/wheels/*.whl
