@@ -30,8 +30,14 @@ jobs:
         run: |
           git clone https://github.com/huggingface/hf_transfer
           cd hf_transfer
-          # Patch Cargo.toml to enable generate-import-lib for pyo3
-          python -c "import sys; p = 'Cargo.toml'; c = open(p).read(); c = c.replace('features = [\"extension-module\", \"abi3-py38\"]', 'features = [\"extension-module\", \"abi3-py38\", \"generate-import-lib\"]'); open(p, 'w').write(c)"
+          echo "::group::Before Patch Cargo.toml"
+          cat Cargo.toml
+          echo "::endgroup::"
+          # Patch Cargo.toml to enable generate-import-lib for pyo3 using regex for robustness
+          python -c "import re; p = 'Cargo.toml'; c = open(p).read(); c = re.sub(r'(pyo3\s*=\s*\{.*features\s*=\s*\[[^\]]+)(\])', r'\1, \"generate-import-lib\"]', c); open(p, 'w').write(c)"
+          echo "::group::After Patch Cargo.toml"
+          cat Cargo.toml
+          echo "::endgroup::"
           # Optional: checkout a specific version
           # git checkout v0.1.9 
           maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib
