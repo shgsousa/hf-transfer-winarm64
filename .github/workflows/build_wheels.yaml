@@ -32,16 +32,22 @@ jobs:
 
       - name: Clone and Build hf_transfer
         env:
-          # TELLS PYO3 TO IGNORE THE HOST PYTHON AND USE THE GENERATED LIB
+          # Keep this: prevents PyO3 from inspecting the x64 host Python
           PYO3_NO_PYTHON: '1'
         run: |
           git clone https://github.com/huggingface/hf_transfer
           cd hf_transfer
           
-          # 1. Enable generate-import-lib in Cargo.toml
-          cargo add pyo3 --features generate-import-lib
+          echo "::group::Patch Cargo.toml"
+          # 1. FIX: Replace abi3-py38 (legacy) with abi3-py311 (standard)
+          # This forces PyO3 to link against 'python3.lib' instead of 'python38.lib'
+          sed -i 's/abi3-py38/abi3-py311/g' Cargo.toml
           
-          # 2. Build
+          # 2. Add pyo3 with generate-import-lib feature
+          cargo add pyo3 --features generate-import-lib
+          echo "::endgroup::"
+          
+          # 3. Build
           maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib
 
       - name: Upload wheels
