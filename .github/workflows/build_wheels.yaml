@@ -35,37 +35,40 @@ jobs:
         env:
           PYO3_NO_PYTHON: '1'
         run: |
+          # FIX 1: Prioritize Strawberry Perl (required for OpenSSL build)
+          # This prevents the "Can't locate Locale/Maketext/Simple.pm" error
+          echo "/c/Strawberry/perl/bin" >> $GITHUB_PATH
+          export PATH="/c/Strawberry/perl/bin:$PATH"
+
           git clone https://github.com/huggingface/hf_transfer
           cd hf_transfer
           
           echo "::group::Patch Cargo.toml"
-          # 1. Set feature to abi3-py312 (Maturin needs this to know the target)
+          # Set feature to abi3-py312
           sed -i 's/abi3-py38/abi3-py312/g' Cargo.toml
           
-          # 2. Add pyo3 with generate-import-lib
+          # Add pyo3 with generate-import-lib
           cargo add pyo3 --features generate-import-lib
           echo "::endgroup::"
           
           echo "::group::Build Attempt 1 (Expected to Fail)"
-          # 3. Build knowing it will fail at linking (LNK1181)
-          # We use '|| true' to prevent the workflow from stopping here
+          # Build knowing it will fail at linking
           maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib || true
           echo "::endgroup::"
           
           echo "::group::Apply Lib Hack"
-          # 4. Find the generated python3.lib and copy it to python311.lib
-          # This tricks the linker into accepting the generic lib as the specific version
+          # FIX 2: Copy to python312.lib (matches the abi3-py312 feature above)
           count=$(find target -name "python3.lib" | wc -l)
           echo "Found $count instances of python3.lib"
           
           for f in $(find target -name "python3.lib"); do 
-            echo "Copying $f to $(dirname "$f")/python311.lib"
-            cp "$f" "$(dirname "$f")/python311.lib"
+            echo "Copying $f to $(dirname "$f")/python312.lib"
+            cp "$f" "$(dirname "$f")/python312.lib"
           done
           echo "::endgroup::"
           
           echo "::group::Build Attempt 2 (Success)"
-          # 5. Build again. It should resume, find the lib, and link successfully.
+          # Build again. It should now find python312.lib and succeed.
           maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib
           echo "::endgroup::"
 
