@@ -1,0 +1,40 @@
+name: Build Wheels
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: aarch64-pc-windows-msvc
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install maturin
+        run: pip install maturin
+      # We clone hf_transfer dynamically to build its latest version (or a specific tag)
+      - name: Clone and Build hf_transfer
+        run: |
+          git clone https://github.com/huggingface/hf_transfer
+          cd hf_transfer
+          # Optional: checkout a specific version
+          # git checkout v0.1.9 
+          maturin build --release --target aarch64-pc-windows-msvc
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels
+          path: hf_transfer/target/wheels/*.whl
