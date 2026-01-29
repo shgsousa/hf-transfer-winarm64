@@ -39,17 +39,18 @@ jobs:
           cd hf_transfer
           
           echo "::group::Patch Cargo.toml"
-          # 1. FIX: Replace abi3-py38 (legacy) with abi3-py311 (standard)
-          # This forces PyO3 to link against 'python3.lib' instead of 'python38.lib'
-          sed -i 's/abi3-py38/abi3-py311/g' Cargo.toml
+          # FIX: Replace 'abi3-py38' with generic 'abi3' (.
+          # 'abi3-py311' caused the linker to look for 'python311.lib'. 
+          # Generic 'abi3' makes it look for 'python3.lib', which matches the generated file.
+          sed -i 's/abi3-py38/abi3/g' Cargo.toml
           
-          # 2. Add pyo3 with generate-import-lib feature
+          # Add pyo3 with generate-import-lib. 
+          # This upgrades pyo3 to 0.26+ and enables the pure-Rust lib generator.
           cargo add pyo3 --features generate-import-lib
           echo "::endgroup::"
           
-          # 3. Build
+          # Build
           maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib
-
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
