@@ -32,7 +32,7 @@ jobs:
           cd hf_transfer
           # Optional: checkout a specific version
           # git checkout v0.1.9 
-          maturin build --release --target aarch64-pc-windows-msvc
+          maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
