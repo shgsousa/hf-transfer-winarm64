@@ -31,21 +31,17 @@ jobs:
         run: pip install maturin
 
       - name: Clone and Build hf_transfer
+        env:
+          # TELLS PYO3 TO IGNORE THE HOST PYTHON AND USE THE GENERATED LIB
+          PYO3_NO_PYTHON: '1'
         run: |
           git clone https://github.com/huggingface/hf_transfer
           cd hf_transfer
           
-          echo "::group::Before Patch Cargo.toml"
-          cat Cargo.toml
-          echo "::endgroup::"
-          
-          # FIX: Use cargo add instead of regex to enable generate-import-lib
+          # 1. Enable generate-import-lib in Cargo.toml
           cargo add pyo3 --features generate-import-lib
           
-          echo "::group::After Patch Cargo.toml"
-          cat Cargo.toml
-          echo "::endgroup::"
-          
+          # 2. Build
           maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib
 
       - name: Upload wheels
