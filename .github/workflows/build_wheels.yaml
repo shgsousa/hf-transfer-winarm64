@@ -4,6 +4,7 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+
 jobs:
   build_wheels:
     name: Build wheels on ${{ matrix.os }}
@@ -14,31 +15,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           targets: aarch64-pc-windows-msvc
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - name: Install maturin
         run: pip install maturin
-      # We clone hf_transfer dynamically to build its latest version (or a specific tag)
+
       - name: Clone and Build hf_transfer
         run: |
           git clone https://github.com/huggingface/hf_transfer
           cd hf_transfer
-          echo "Current Cargo.toml content:"
-          type Cargo.toml
-          # Patch Cargo.toml to enable generate-import-lib for pyo3 using simple replacement
-          python -c "p = 'Cargo.toml'; c = open(p).read(); c = c.replace('\"abi3-py38\"]', '\"abi3-py38\", \"generate-import-lib\"]'); open(p, 'w').write(c)"
-          echo "Patched Cargo.toml content:"
-          type Cargo.toml
-          # Optional: checkout a specific version
-          # git checkout v0.1.9 
-          maturin build --release --target aarch64-pc-windows-msvc
+          
+          echo "::group::Before Patch Cargo.toml"
+          cat Cargo.toml
+          echo "::endgroup::"
+          
+          # FIX: Use cargo add instead of regex to enable generate-import-lib
+          cargo add pyo3 --features generate-import-lib
+          
+          echo "::group::After Patch Cargo.toml"
+          cat Cargo.toml
+          echo "::endgroup::"
+          
+          maturin build --release --target aarch64-pc-windows-msvc --features pyo3/extension-module,pyo3/generate-import-lib
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
